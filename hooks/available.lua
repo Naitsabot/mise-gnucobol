@@ -4,16 +4,9 @@
 --- @return table[] List of available versions
 function PLUGIN:Available(ctx)
     local http = require("http")
-    local json = require("json")
 
-    -- Example 1: GitHub Tags API (most common)
-    -- Replace <GITHUB_USER>/<GITHUB_REPO> with your tool's repository
-    local repo_url = "https://api.github.com/repos/<GITHUB_USER>/<GITHUB_REPO>/tags"
+    local repo_url = "https://sourceforge.net/projects/gnucobol/rss?path=/"
 
-    -- Example 2: GitHub Releases API (for tools that use GitHub releases)
-    -- local repo_url = "https://api.github.com/repos/<GITHUB_USER>/<GITHUB_REPO>/releases"
-
-    -- mise automatically handles GitHub authentication - no manual token setup needed
     local resp, err = http.get({
         url = repo_url,
     })
@@ -22,29 +15,23 @@ function PLUGIN:Available(ctx)
         error("Failed to fetch versions: " .. err)
     end
     if resp.status_code ~= 200 then
-        error("GitHub API returned status " .. resp.status_code .. ": " .. resp.body)
+        error("SourceForge returned status " .. resp.status_code .. ": " .. resp.body)
     end
 
-    local tags = json.decode(resp.body)
     local result = {}
+    local seen = {}
 
-    -- Process tags/releases
-    for _, tag_info in ipairs(tags) do
-        local version = tag_info.name
 
-        -- Clean up version string (remove 'v' prefix if present)
-        -- version = version:gsub("^v", "")
+    for path in resp.body:gmatch("<title><!%[CDATA%[(.-)%]%]></title>") do
+        local version = path:match("^/gnucobol/[^/]+/gnucobol%-(%d+%.%d+%.%d+)%.tar%.gz$")
 
-        -- For releases API, you might want:
-        -- local version = tag_info.tag_name:gsub("^v", "")
-        -- local is_prerelease = tag_info.prerelease or false
-        -- local note = is_prerelease and "pre-release" or nil
+        if version and not seen[version] then
+            seen[version] = true
 
-        table.insert(result, {
-            version = version,
-            note = nil, -- Optional: "latest", "lts", "pre-release", etc.
-            -- addition = {} -- Optional: additional tools/components
-        })
+            table.insert(result, {
+                version = version,
+            })
+        end
     end
 
     return result

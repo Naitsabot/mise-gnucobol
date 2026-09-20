@@ -20,7 +20,11 @@ function PLUGIN:PreInstall(ctx)
     -- local url = "https://raw.githubusercontent.com/<GITHUB_USER>/<GITHUB_REPO>/" .. version .. "/bin/<TOOL>"
 
     -- Replace with your actual download URL pattern
-    local url = "https://example.com/<TOOL>/releases/download/" .. version .. "/<TOOL>"
+    local url = "https://sourceforge.net/projects/gnucobol/files/gnucobol/"
+        .. version
+        .. "/gnucobol-"
+        .. version
+        .. ".tar.gz/download"
 
     -- Optional: Fetch checksum for verification
     -- local sha256 = fetch_checksum(version) -- Implement if checksums are available
@@ -29,7 +33,7 @@ function PLUGIN:PreInstall(ctx)
         version = version,
         url = url,
         -- sha256 = sha256, -- Optional but recommended for security
-        note = "Downloading <TOOL> " .. version,
+        note = "Downloading GnuCOBOL " .. version,
         -- addition = { -- Optional: download additional components
         --     {
         --         name = "component",
