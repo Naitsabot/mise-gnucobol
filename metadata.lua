@@ -28,25 +28,8 @@ PLUGIN = { -- luacheck: ignore
     -- }
 
     systemDependencies = {
-    --    {
-    --        bin = "gcc",
-    --        packages = {
-    --            pacman = "gcc",
-    --            apt = "gcc",
-    --            dnf = "gcc",
-    --            brew = "gcc",
-    --        },
-    --    },
-    --    {
-    --        bin = "make",
-    --        packages = {
-    --            pacman = "make",
-    --            apt = "make",
-    --            dnf = "make",
-    --            brew = "make",
-    --        },
-    --    },
         {
+            name = "gmp",
             pkgconfig = "gmp",
             packages = {
                 pacman = "gmp",
@@ -56,7 +39,8 @@ PLUGIN = { -- luacheck: ignore
             },
         },
         {
-            bin = "ncurses",
+            name = "ncurses",
+            pkgconfig = "ncurses",
             packages = {
                 pacman = "ncurses",
                 apt = "libncurses-dev",
@@ -64,32 +48,34 @@ PLUGIN = { -- luacheck: ignore
                 brew = "ncurses",
             },
         },
-    --    {
-    --        bin = "db",
-    --        packages = {
-    --            pacman = "db",
-    --            apt = "libdb-dev",
-    --            dnf = "libdb-devel",
-    --            brew = "berkeley-db",
-    --        },
-    --    },
-    --    {
-    --        pkgconfig = "libxml-2.0",
-    --        packages = {
-    --            pacman = "libxml2",
-    --            apt = "libxml2-dev",
-    --            dnf = "libxml2-devel",
-    --            brew = "libxml2",
-    --        },
-    --    },
-    --    {
-    --        pkgconfig = "json-c",
-    --        packages = {
-    --            pacman = "json-c",
-    --            apt = "libjson-c-dev",
-    --            dnf = "json-c-devel",
-    --            brew = "json-c",
-    --        },
-    --    },
-    },
+        {
+            name = "berkeley-db",
+            packages = {
+                pacman = "db",
+                apt = "libdb-dev",
+                dnf = "libdb-devel",
+                brew = "berkeley-db",
+            },
+        },
+        {
+            name = "json-c",
+            pkgconfig = "json-c",
+            packages = {
+                pacman = "json-c",
+                apt = "libjson-c-dev",
+                dnf = "json-c-devel",
+                brew = "json-c",
+            },
+        },
+        {
+            name = "libxml2",
+            pkgconfig = "libxml-2.0",
+            packages = {
+                pacman = "libxml2",
+                apt = "libxml2-dev",
+                dnf = "libxml2-devel",
+                brew = "libxml2",
+            },
+        },
+    }
 }
