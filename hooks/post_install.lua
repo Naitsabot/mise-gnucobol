@@ -44,20 +44,31 @@ local function build_jobs()
     return tostring(count or 2)
 end
 
---- Return the Homebrew prefix of a formula, or nil if unavailable.
+--- Return the Homebrew prefix of a formula, or nil if it is not installed.
+--- Falls back to the standard Homebrew locations in case `brew` is not on
+--- the PATH of the hook's shell.
 local function brew_prefix(formula)
-    local handle = io.popen("brew --prefix " .. sh_quote(formula) .. " 2>/dev/null")
-    if not handle then
-        return nil
-    end
-    local output = handle:read("*a")
-    handle:close()
+    local candidates = {}
 
-    local prefix = (output:gsub("%s+$", ""))
-    if prefix == "" or not command_ok("test -d " .. sh_quote(prefix)) then
-        return nil
+    local handle = io.popen("brew --prefix " .. sh_quote(formula) .. " 2>/dev/null")
+    if handle then
+        local output = handle:read("*a")
+        handle:close()
+        local prefix = (output:gsub("%s+$", ""))
+        if prefix ~= "" then
+            table.insert(candidates, prefix)
+        end
     end
-    return prefix
+
+    table.insert(candidates, "/opt/homebrew/opt/" .. formula) -- Apple Silicon
+    table.insert(candidates, "/usr/local/opt/" .. formula) -- Intel
+
+    for _, prefix in ipairs(candidates) do
+        if command_ok("test -d " .. sh_quote(prefix .. "/include")) then
+            return prefix
+        end
+    end
+    return nil
 end
 
 --- Build CPPFLAGS and LDFLAGS for configure.
@@ -125,6 +136,15 @@ function PLUGIN:PostInstall(ctx)
     local configure = path .. "/configure"
     if not command_ok("test -f " .. sh_quote(configure)) then
         error("Could not find configure script in " .. path .. ". The source may not have been extracted correctly.")
+    end
+
+    -- On macOS the SDK's db.h is an old BSD header that configure cannot use,
+    -- so a Homebrew Berkeley DB is required.
+    if RUNTIME.osType == "Darwin" and not brew_prefix("berkeley-db") then
+        error(
+            "Homebrew's Berkeley DB was not found. Run `brew install berkeley-db` "
+                .. "and retry. (The macOS SDK's db.h is not usable by GnuCOBOL.)"
+        )
     end
 
     -- Configure the build environment.
