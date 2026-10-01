@@ -1,14 +1,16 @@
---- Performs additional setup after installation
+--- Builds GnuCOBOL from source and installs it into the mise install directory.
 --- Documentation: https://mise.jdx.dev/tool-plugin-development.html#postinstall-hook
---- @param ctx {rootPath: string, runtimeVersion: string, sdkInfo: table} Context
+---
+--- Build requirements (not installed by this plugin; see metadata.lua):
+--- a C toolchain (gcc/clang + make) plus GMP, ncurses, Berkeley DB, json-c
+--- and libxml2 development packages.
+---   Debian/Ubuntu: apt install build-essential libgmp-dev libncurses-dev libdb-dev libjson-c-dev libxml2-dev
+---   Arch:          pacman -S base-devel gmp ncurses db json-c libxml2
+---   macOS:         brew install gmp ncurses berkeley-db json-c libxml2
 
--- GnuCOBOL needs a C toolchain (gcc/clang + make) plus GMP, ncurses and
--- Berkeley DB (or GDBM) development headers to build. json-c and libxml2
--- are required here because configure is invoked with --with-json=json-c
--- and --with-xml2. None of these are installed by this plugin.
---   Debian/Ubuntu: apt install build-essential libgmp-dev libncurses-dev libdb-dev libjson-c-dev libxml2-dev
---   Arch:          pacman -S base-devel gmp ncurses db json-c libxml2
---   macOS:         brew install gmp ncurses berkeley-db json-c libxml2
+-- Strips bytes that are not valid UTF-8. mise discards the rest of a task's
+-- output when it meets such bytes, which hides the real configure error.
+local SANITIZE = "LC_ALL=C tr -cd '[:print:]\\n\\t'"
 
 --- Lowercased OS name. The vfox runtime reports "darwin", "linux" and
 --- "windows" in lowercase.
@@ -23,30 +25,42 @@ local function command_ok(cmd)
     return status == 0 or status == true
 end
 
+--- Run a shell command and raise `message` if it fails.
+local function run(cmd, message)
+    if not command_ok(cmd) then
+        error(message)
+    end
+end
+
+--- Run a shell command and return its stdout ("" on failure to start).
+local function read_output(cmd)
+    local handle = io.popen(cmd)
+    if not handle then
+        return ""
+    end
+    local output = handle:read("*a")
+    handle:close()
+    return output
+end
+
 --- Quote a string for safe use inside a POSIX shell command.
 local function sh_quote(value)
     return "'" .. (value:gsub("'", "'\\''")) .. "'"
 end
 
---- Run a command and return its first integer output, or nil.
-local function command_int(cmd)
-    local handle = io.popen(cmd)
-    if not handle then
-        return nil
-    end
-    local output = handle:read("*a")
-    handle:close()
-    return tonumber(output:match("%d+"))
+local function trim(value)
+    return (value:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
 --- Number of parallel build jobs for the current OS.
 local function build_jobs()
-    local count
+    local cmd
     if os_type() == "linux" then
-        count = command_int("nproc 2>/dev/null")
+        cmd = "nproc"
     elseif os_type() == "darwin" then
-        count = command_int("sysctl -n hw.ncpu 2>/dev/null")
+        cmd = "sysctl -n hw.ncpu"
     end
+    local count = cmd and tonumber(read_output(cmd .. " 2>/dev/null"):match("%d+"))
     return tostring(count or 2)
 end
 
@@ -56,29 +70,23 @@ end
 local function brew_prefix(formula)
     local candidates = {}
 
-    local handle = io.popen("brew --prefix " .. sh_quote(formula) .. " 2>/dev/null")
-    if handle then
-        local output = handle:read("*a")
-        handle:close()
-        local prefix = (output:gsub("%s+$", ""))
-        if prefix ~= "" then
-            table.insert(candidates, prefix)
-        end
+    local prefix = trim(read_output("brew --prefix " .. sh_quote(formula) .. " 2>/dev/null"))
+    if prefix ~= "" then
+        table.insert(candidates, prefix)
     end
-
     table.insert(candidates, "/opt/homebrew/opt/" .. formula) -- Apple Silicon
     table.insert(candidates, "/usr/local/opt/" .. formula) -- Intel
 
-    for _, prefix in ipairs(candidates) do
-        if command_ok("test -d " .. sh_quote(prefix .. "/include")) then
-            return prefix
+    for _, candidate in ipairs(candidates) do
+        if command_ok("test -d " .. sh_quote(candidate .. "/include")) then
+            return candidate
         end
     end
     return nil
 end
 
---- Build CPPFLAGS and LDFLAGS for configure.
---- macOS ships an old BSD db.h (Berkeley DB 1.85) in the SDK, which has no
+--- CPPFLAGS and LDFLAGS for configure.
+--- macOS ships an old BSD db.h (Berkeley DB 1.85) in the SDK. It has no
 --- version macros, so configure finds it and then cannot extract a version.
 --- The Homebrew include path must come first to shadow it. Homebrew
 --- libraries are also outside the default search path on Apple Silicon.
@@ -101,71 +109,57 @@ local function build_cpp_ld_flags()
         end
     end
 
-    return (cppflags:gsub("%s+$", "")), (ldflags:gsub("%s+$", ""))
+    return trim(cppflags), trim(ldflags)
 end
 
---- Build CFLAGS for configure.
---- Recent GCC (14+) rejects implicit function declarations and
---- incompatible pointer types as errors by default, which breaks
---- GnuCOBOL's older C source. Relax those two warnings, the same fix
---- distro packagers use (e.g. Arch's AUR package).
+--- CFLAGS for configure.
+--- GCC 14+ rejects implicit function declarations and incompatible pointer
+--- types as errors by default, which breaks GnuCOBOL's older C source. Relax
+--- those two diagnostics, as distro packagers do (e.g. Arch's AUR package).
 --- Any existing _FORTIFY_SOURCE define is removed because
 --- --enable-hardening sets its own.
 local function build_cflags()
     local cflags = os.getenv("CFLAGS") or ""
     cflags = cflags:gsub("%-Wp,%-D_FORTIFY_SOURCE=%d", "")
     cflags = cflags:gsub("%-D_FORTIFY_SOURCE=%d", "")
-    cflags = cflags:gsub("^%s+", ""):gsub("%s+$", "")
 
     local extra = {
         "-O2",
         "-Wno-error=implicit-function-declaration",
         "-Wno-error=incompatible-pointer-types",
     }
-
-    if cflags ~= "" then
-        return cflags .. " " .. table.concat(extra, " ")
-    end
-    return table.concat(extra, " ")
+    return trim(cflags .. " " .. table.concat(extra, " "))
 end
 
+--- @param ctx {rootPath: string, runtimeVersion: string, sdkInfo: table} Context
 function PLUGIN:PostInstall(ctx)
-    local sdkInfo = ctx.sdkInfo[PLUGIN.name]
-    local path = sdkInfo.path
+    local path = ctx.sdkInfo[PLUGIN.name].path
 
     if os_type() == "windows" then
         error("This plugin builds GnuCOBOL from source and does not support Windows directly. Use WSL, or a Linux/macOS host.")
     end
 
-    -- Mise extracts the tarball and strips the top-level directory.
-    -- Check that the configure script is present.
-    local configure = path .. "/configure"
-    if not command_ok("test -f " .. sh_quote(configure)) then
-        error("Could not find configure script in " .. path .. ". The source may not have been extracted correctly.")
-    end
+    -- mise extracts the tarball and strips the top-level directory.
+    run(
+        "test -f " .. sh_quote(path .. "/configure"),
+        "Could not find configure script in " .. path .. ". The source may not have been extracted correctly."
+    )
 
-    -- On macOS the SDK's db.h is an old BSD header that configure cannot use,
-    -- so a Homebrew Berkeley DB is required.
+    -- The macOS SDK's db.h cannot be used by GnuCOBOL (see build_cpp_ld_flags).
     if os_type() == "darwin" and not brew_prefix("berkeley-db") then
-        error(
-            "Homebrew's Berkeley DB was not found. Run `brew install berkeley-db` "
-                .. "and retry. (The macOS SDK's db.h is not usable by GnuCOBOL.)"
-        )
+        error("Homebrew's Berkeley DB was not found. Run `brew install berkeley-db` and retry.")
     end
-
-    -- Configure the build environment.
-    -- Missing libraries (GMP, ncurses, Berkeley DB, json-c, libxml2) are
-    -- detected by configure itself, which reports which one is missing.
-    local cppflags, ldflags = build_cpp_ld_flags()
 
     -- Build out of tree. The install prefix is the source directory, so an
     -- in-tree build makes `make install` copy generated files (e.g.
     -- bin/cob-config) onto themselves, which GNU install rejects.
     local builddir = path .. "/mise-build"
-    if not command_ok("mkdir -p " .. sh_quote(builddir)) then
-        error("Could not create build directory " .. builddir)
-    end
+    run("mkdir -p " .. sh_quote(builddir), "Could not create build directory " .. builddir)
 
+    -- Configure. Missing libraries are detected by configure itself, which
+    -- names the one that is missing. Output goes to a file and is printed
+    -- sanitized, keeping configure's exit status.
+    local cppflags, ldflags = build_cpp_ld_flags()
     local configure_cmd = table.concat({
         "CC=" .. sh_quote("gcc -std=gnu17"),
         "CFLAGS=" .. sh_quote(build_cflags()),
@@ -181,52 +175,22 @@ function PLUGIN:PostInstall(ctx)
         "--with-xml2",
     }, " ")
 
-    -- configure output can contain bytes that are not valid UTF-8, which
-    -- makes mise drop the rest of the task output (hiding the real error).
-    -- Capture it in a file and print a sanitized copy, keeping the exit status.
-    local sanitize = "LC_ALL=C tr -cd '[:print:]\\n\\t'"
-    local logfile = builddir .. "/mise-configure.out"
-    local run_cmd = table.concat({
-        "cd " .. sh_quote(builddir) .. ";",
-        "(" .. configure_cmd .. ") > " .. sh_quote(logfile) .. " 2>&1;",
-        "rc=$?;",
-        sanitize .. " < " .. sh_quote(logfile) .. ";",
-        "exit $rc",
-    }, " ")
-
-    if not command_ok(run_cmd) then
-        -- Print enough context to diagnose the failure from CI logs.
-        os.execute(table.concat({
-            "(",
+    local logfile = sh_quote(builddir .. "/configure.out")
+    run(
+        table.concat({
             "cd " .. sh_quote(builddir) .. ";",
-            "echo '--- flags passed to configure ---';",
-            "echo CPPFLAGS=" .. sh_quote(cppflags) .. ";",
-            "echo LDFLAGS=" .. sh_quote(ldflags) .. ";",
-            "echo '--- config.log tail ---';",
-            "tail -n 60 config.log",
-            ") 2>&1 |",
-            sanitize,
-        }, " "))
-        error(
-            "Failed to configure GnuCOBOL. See the configure output and "
-                .. "config.log excerpt above for the failing check. Required "
-                .. "libraries: GMP, ncurses, Berkeley DB, json-c, libxml2 "
-                .. "(development packages)."
-        )
-    end
+            "(" .. configure_cmd .. ") > " .. logfile .. " 2>&1;",
+            "rc=$?;",
+            SANITIZE .. " < " .. logfile .. ";",
+            "exit $rc",
+        }, " "),
+        "Failed to configure GnuCOBOL. See the configure output above. Required "
+            .. "libraries: GMP, ncurses, Berkeley DB, json-c, libxml2 (development packages)."
+    )
 
-    -- Build
-    local build_cmd = string.format("cd %s && make -j%s", sh_quote(builddir), build_jobs())
-    if not command_ok(build_cmd) then
-        error("Failed to build GnuCOBOL.")
-    end
+    -- Build and install.
+    run(string.format("cd %s && make -j%s", sh_quote(builddir), build_jobs()), "Failed to build GnuCOBOL.")
+    run(string.format("cd %s && make install", sh_quote(builddir)), "Failed to install GnuCOBOL.")
 
-    -- Install
-    local install_cmd = string.format("cd %s && make install", sh_quote(builddir))
-    if not command_ok(install_cmd) then
-        error("Failed to install GnuCOBOL.")
-    end
-
-    -- Remove the build directory; it is no longer needed.
     command_ok("rm -rf " .. sh_quote(builddir))
 end

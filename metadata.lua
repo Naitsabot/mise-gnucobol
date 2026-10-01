@@ -3,25 +3,13 @@
 -- Documentation: https://mise.jdx.dev/tool-plugin-development.html#metadata-lua
 
 PLUGIN = { -- luacheck: ignore
-    -- Required: Tool name (lowercase, no spaces)
     name = "gnucobol",
-
-    -- Required: Plugin version (not the tool version)
     version = "1.0.0",
-
-    -- Required: Brief description of the tool
     description = "A mise tool plugin for GnuCOBOL",
-
-    -- Required: Plugin author/maintainer
     author = "Naitsabot",
-
-    -- Optional: Repository URL for plugin updates
     updateUrl = "https://github.com/Naitsabot/mise-gnucobol",
-
     -- Optional: Minimum mise runtime version required
     minRuntimeVersion = "0.2.0",
-
-    -- Each entry must set exactly one check: bin, pkgconfig, sharedlib or command.
     systemDependencies = {
         -- Build tools
         {

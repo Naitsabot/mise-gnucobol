@@ -1,4 +1,5 @@
 --- Returns a list of available versions for the GnuCobol from gnu.org
+--- Documentation: https://mise.jdx.dev/tool-plugin-development.html#available-hook
 --- @param ctx {args: string[]} Context (args = user arguments)
 --- @return table[] List of available versions
 function PLUGIN:Available(ctx)
