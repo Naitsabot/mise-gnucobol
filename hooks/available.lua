@@ -31,9 +31,28 @@ function PLUGIN:Available(ctx)
         end
     end
 
-    if #result == 0 then
-        error("No versions found at " .. index_url .. " - the page layout may have changed")
-    end
+    table.sort(result, function(a, b)
+        local function parts(v)
+            local p = {}
+            for n in v:gmatch("%d+") do
+                p[#p + 1] = tonumber(n)
+            end
+            return p
+        end
+
+        local pa, pb = parts(a.version), parts(b.version)
+
+        for i = 1, math.max(#pa, #pb) do
+            local na = pa[i] or 0
+            local nb = pb[i] or 0
+
+            if na ~= nb then
+                return na > nb
+            end
+        end
+
+        return false
+    end)
 
     return result
 end
