@@ -157,12 +157,21 @@ function PLUGIN:PostInstall(ctx)
     -- Missing libraries (GMP, ncurses, Berkeley DB, json-c, libxml2) are
     -- detected by configure itself, which reports which one is missing.
     local cppflags, ldflags = build_cpp_ld_flags()
+
+    -- Build out of tree. The install prefix is the source directory, so an
+    -- in-tree build makes `make install` copy generated files (e.g.
+    -- bin/cob-config) onto themselves, which GNU install rejects.
+    local builddir = path .. "/mise-build"
+    if not command_ok("mkdir -p " .. sh_quote(builddir)) then
+        error("Could not create build directory " .. builddir)
+    end
+
     local configure_cmd = table.concat({
         "CC=" .. sh_quote("gcc -std=gnu17"),
         "CFLAGS=" .. sh_quote(build_cflags()),
         "CPPFLAGS=" .. sh_quote(cppflags),
         "LDFLAGS=" .. sh_quote(ldflags),
-        "./configure",
+        "../configure",
         "--prefix=" .. sh_quote(path),
         "--infodir=" .. sh_quote(path .. "/share/info"),
         "--enable-hardening",
@@ -176,9 +185,9 @@ function PLUGIN:PostInstall(ctx)
     -- makes mise drop the rest of the task output (hiding the real error).
     -- Capture it in a file and print a sanitized copy, keeping the exit status.
     local sanitize = "LC_ALL=C tr -cd '[:print:]\\n\\t'"
-    local logfile = path .. "/mise-configure.out"
+    local logfile = builddir .. "/mise-configure.out"
     local run_cmd = table.concat({
-        "cd " .. sh_quote(path) .. ";",
+        "cd " .. sh_quote(builddir) .. ";",
         "(" .. configure_cmd .. ") > " .. sh_quote(logfile) .. " 2>&1;",
         "rc=$?;",
         sanitize .. " < " .. sh_quote(logfile) .. ";",
@@ -189,7 +198,7 @@ function PLUGIN:PostInstall(ctx)
         -- Print enough context to diagnose the failure from CI logs.
         os.execute(table.concat({
             "(",
-            "cd " .. sh_quote(path) .. ";",
+            "cd " .. sh_quote(builddir) .. ";",
             "echo '--- flags passed to configure ---';",
             "echo CPPFLAGS=" .. sh_quote(cppflags) .. ";",
             "echo LDFLAGS=" .. sh_quote(ldflags) .. ";",
@@ -207,14 +216,17 @@ function PLUGIN:PostInstall(ctx)
     end
 
     -- Build
-    local build_cmd = string.format("cd %s && make -j%s", sh_quote(path), build_jobs())
+    local build_cmd = string.format("cd %s && make -j%s", sh_quote(builddir), build_jobs())
     if not command_ok(build_cmd) then
         error("Failed to build GnuCOBOL.")
     end
 
     -- Install
-    local install_cmd = string.format("cd %s && make install", sh_quote(path))
+    local install_cmd = string.format("cd %s && make install", sh_quote(builddir))
     if not command_ok(install_cmd) then
         error("Failed to install GnuCOBOL.")
     end
+
+    -- Remove the build directory; it is no longer needed.
+    command_ok("rm -rf " .. sh_quote(builddir))
 end
