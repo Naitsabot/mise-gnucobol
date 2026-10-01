@@ -149,6 +149,21 @@ function PLUGIN:PostInstall(ctx)
     }, " ")
 
     if not command_ok(configure_cmd) then
+        -- Print enough context to diagnose the failure from CI logs.
+        os.execute(table.concat({
+            "cd " .. sh_quote(path) .. ";",
+            "echo '--- flags passed to configure ---';",
+            "echo CPPFLAGS=" .. sh_quote(cppflags) .. ";",
+            "echo LDFLAGS=" .. sh_quote(ldflags) .. ";",
+            "echo '--- db.h candidates ---';",
+            "find /usr/include /usr/local/include /opt/homebrew/include",
+            "\"$(xcrun --show-sdk-path 2>/dev/null)/usr/include\"",
+            "-maxdepth 2 -name db.h 2>/dev/null;",
+            "echo '--- configure source around the failing check ---';",
+            "grep -n -B15 'unable to extract Berkeley DB' configure;",
+            "echo '--- config.log tail ---';",
+            "tail -n 60 config.log",
+        }, " "))
         error(
             "Failed to configure GnuCOBOL. Check the configure output above; "
                 .. "it names the missing library. Required: GMP, ncurses, "
