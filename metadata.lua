@@ -62,8 +62,14 @@ PLUGIN = { -- luacheck: ignore
         },
         {
             -- Berkeley DB ships no .pc file, so check for the header directly.
-            command = "printf '#include <db.h>\\nint main(void) { return 0; }\\n' | "
-                .. "cc -x c - -c -o /dev/null 2>/dev/null",
+            -- Use DB_VERSION_MAJOR so macOS's old BSD db.h (no version macros)
+            -- does not count as a match, and look in the Homebrew prefix.
+            command = 'I=""; '
+                .. "if command -v brew >/dev/null 2>&1; then "
+                .. 'P=$(brew --prefix berkeley-db 2>/dev/null); [ -n "$P" ] && I="-I$P/include"; '
+                .. "fi; "
+                .. "printf '#include <db.h>\\nint main(void) { return DB_VERSION_MAJOR; }\\n' | "
+                .. 'cc $I -x c - -c -o /dev/null 2>/dev/null',
             packages = {
                 pacman = "db",
                 apt = "libdb-dev",

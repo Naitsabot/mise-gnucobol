@@ -44,6 +44,49 @@ local function build_jobs()
     return tostring(count or 2)
 end
 
+--- Return the Homebrew prefix of a formula, or nil if unavailable.
+local function brew_prefix(formula)
+    local handle = io.popen("brew --prefix " .. sh_quote(formula) .. " 2>/dev/null")
+    if not handle then
+        return nil
+    end
+    local output = handle:read("*a")
+    handle:close()
+
+    local prefix = (output:gsub("%s+$", ""))
+    if prefix == "" or not command_ok("test -d " .. sh_quote(prefix)) then
+        return nil
+    end
+    return prefix
+end
+
+--- Build CPPFLAGS and LDFLAGS for configure.
+--- macOS ships an old BSD db.h (Berkeley DB 1.85) in the SDK, which has no
+--- version macros, so configure finds it and then cannot extract a version.
+--- The Homebrew include path must come first to shadow it. Homebrew
+--- libraries are also outside the default search path on Apple Silicon.
+local function build_cpp_ld_flags()
+    local cppflags = os.getenv("CPPFLAGS") or ""
+    local ldflags = os.getenv("LDFLAGS") or ""
+
+    if RUNTIME.osType == "Darwin" then
+        local cpp, ld = {}, {}
+        for _, formula in ipairs({ "berkeley-db", "gmp", "json-c" }) do
+            local prefix = brew_prefix(formula)
+            if prefix then
+                table.insert(cpp, "-I" .. prefix .. "/include")
+                table.insert(ld, "-L" .. prefix .. "/lib")
+            end
+        end
+        if #cpp > 0 then
+            cppflags = table.concat(cpp, " ") .. " " .. cppflags
+            ldflags = table.concat(ld, " ") .. " " .. ldflags
+        end
+    end
+
+    return (cppflags:gsub("%s+$", "")), (ldflags:gsub("%s+$", ""))
+end
+
 --- Build CFLAGS for configure.
 --- Recent GCC (14+) rejects implicit function declarations and
 --- incompatible pointer types as errors by default, which breaks
@@ -87,11 +130,14 @@ function PLUGIN:PostInstall(ctx)
     -- Configure the build environment.
     -- Missing libraries (GMP, ncurses, Berkeley DB, json-c, libxml2) are
     -- detected by configure itself, which reports which one is missing.
+    local cppflags, ldflags = build_cpp_ld_flags()
     local configure_cmd = table.concat({
         "cd " .. sh_quote(path),
         "&&",
         "CC=" .. sh_quote("gcc -std=gnu17"),
         "CFLAGS=" .. sh_quote(build_cflags()),
+        "CPPFLAGS=" .. sh_quote(cppflags),
+        "LDFLAGS=" .. sh_quote(ldflags),
         "./configure",
         "--prefix=" .. sh_quote(path),
         "--infodir=" .. sh_quote(path .. "/share/info"),
