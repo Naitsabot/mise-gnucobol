@@ -46,15 +46,15 @@ PLUGIN = { -- luacheck: ignore
     --            brew = "make",
     --        },
     --    },
-    --    {
-    --        pkgconfig = "gmp",
-    --        packages = {
-    --            pacman = "gmp",
-    --            apt = "libgmp-dev",
-    --            dnf = "gmp-devel",
-    --            brew = "gmp",
-    --        },
-    --    },
+        {
+            pkgconfig = "gmp",
+            packages = {
+                pacman = "gmp",
+                apt = "libgmp-dev",
+                dnf = "gmp-devel",
+                brew = "gmp",
+            },
+        },
         {
             bin = "ncurses",
             packages = {
