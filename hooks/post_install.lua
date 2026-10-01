@@ -158,8 +158,6 @@ function PLUGIN:PostInstall(ctx)
     -- detected by configure itself, which reports which one is missing.
     local cppflags, ldflags = build_cpp_ld_flags()
     local configure_cmd = table.concat({
-        "cd " .. sh_quote(path),
-        "&&",
         "CC=" .. sh_quote("gcc -std=gnu17"),
         "CFLAGS=" .. sh_quote(build_cflags()),
         "CPPFLAGS=" .. sh_quote(cppflags),
@@ -174,26 +172,37 @@ function PLUGIN:PostInstall(ctx)
         "--with-xml2",
     }, " ")
 
-    if not command_ok(configure_cmd) then
+    -- configure output can contain bytes that are not valid UTF-8, which
+    -- makes mise drop the rest of the task output (hiding the real error).
+    -- Capture it in a file and print a sanitized copy, keeping the exit status.
+    local sanitize = "LC_ALL=C tr -cd '[:print:]\\n\\t'"
+    local logfile = path .. "/mise-configure.out"
+    local run_cmd = table.concat({
+        "cd " .. sh_quote(path) .. ";",
+        "(" .. configure_cmd .. ") > " .. sh_quote(logfile) .. " 2>&1;",
+        "rc=$?;",
+        sanitize .. " < " .. sh_quote(logfile) .. ";",
+        "exit $rc",
+    }, " ")
+
+    if not command_ok(run_cmd) then
         -- Print enough context to diagnose the failure from CI logs.
         os.execute(table.concat({
+            "(",
             "cd " .. sh_quote(path) .. ";",
             "echo '--- flags passed to configure ---';",
             "echo CPPFLAGS=" .. sh_quote(cppflags) .. ";",
             "echo LDFLAGS=" .. sh_quote(ldflags) .. ";",
-            "echo '--- db.h candidates ---';",
-            "find /usr/include /usr/local/include /opt/homebrew/include",
-            "\"$(xcrun --show-sdk-path 2>/dev/null)/usr/include\"",
-            "-maxdepth 2 -name db.h 2>/dev/null;",
-            "echo '--- configure source around the failing check ---';",
-            "grep -n -B15 'unable to extract Berkeley DB' configure;",
             "echo '--- config.log tail ---';",
             "tail -n 60 config.log",
+            ") 2>&1 |",
+            sanitize,
         }, " "))
         error(
-            "Failed to configure GnuCOBOL. Check the configure output above; "
-                .. "it names the missing library. Required: GMP, ncurses, "
-                .. "Berkeley DB, json-c, libxml2 (development packages)."
+            "Failed to configure GnuCOBOL. See the configure output and "
+                .. "config.log excerpt above for the failing check. Required "
+                .. "libraries: GMP, ncurses, Berkeley DB, json-c, libxml2 "
+                .. "(development packages)."
         )
     end
 
