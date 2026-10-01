@@ -26,4 +26,70 @@ PLUGIN = { -- luacheck: ignore
     --     ".<TOOL>-version",
     --     ".<TOOL>rc"
     -- }
+
+    systemDependencies = {
+    --    {
+    --        bin = "gcc",
+    --        packages = {
+    --            pacman = "gcc",
+    --            apt = "gcc",
+    --            dnf = "gcc",
+    --            brew = "gcc",
+    --        },
+    --    },
+    --    {
+    --        bin = "make",
+    --        packages = {
+    --            pacman = "make",
+    --            apt = "make",
+    --            dnf = "make",
+    --            brew = "make",
+    --        },
+    --    },
+    --    {
+    --        pkgconfig = "gmp",
+    --        packages = {
+    --            pacman = "gmp",
+    --            apt = "libgmp-dev",
+    --            dnf = "gmp-devel",
+    --            brew = "gmp",
+    --        },
+    --    },
+        {
+            bin = "ncurses",
+            packages = {
+                pacman = "ncurses",
+                apt = "libncurses-dev",
+                dnf = "ncurses-devel",
+                brew = "ncurses",
+            },
+        },
+    --    {
+    --        bin = "db",
+    --        packages = {
+    --            pacman = "db",
+    --            apt = "libdb-dev",
+    --            dnf = "libdb-devel",
+    --            brew = "berkeley-db",
+    --        },
+    --    },
+    --    {
+    --        pkgconfig = "libxml-2.0",
+    --        packages = {
+    --            pacman = "libxml2",
+    --            apt = "libxml2-dev",
+    --            dnf = "libxml2-devel",
+    --            brew = "libxml2",
+    --        },
+    --    },
+    --    {
+    --        pkgconfig = "json-c",
+    --        packages = {
+    --            pacman = "json-c",
+    --            apt = "libjson-c-dev",
+    --            dnf = "json-c-devel",
+    --            brew = "json-c",
+    --        },
+    --    },
+    },
 }
