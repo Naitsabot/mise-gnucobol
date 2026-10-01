@@ -4,15 +4,10 @@
 --- @return table Version and download information
 function PLUGIN:PreInstall(ctx)
     local version = ctx.version
-    local url = "https://ftp.gnu.org/gnu/gnucobol/gnucobol-" .. version .. ".tar.gz"
 
     return {
         version = version,
-        url = url,
+        url = "https://ftp.gnu.org/gnu/gnucobol/gnucobol-" .. version .. ".tar.gz",
         note = "Downloading GnuCOBOL" .. version,
-        addition = {
-            name = "signature",
-            url = "https://ftp.gnu.org/gnu/gnucobol/$pkgname-$pkgver.tar.xz.sig"
-        }
     }
 end
