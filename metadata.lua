@@ -21,15 +21,28 @@ PLUGIN = { -- luacheck: ignore
     -- Optional: Minimum mise runtime version required
     minRuntimeVersion = "0.2.0",
 
-    -- Optional: Legacy version files this plugin can parse
-    -- legacyFilenames = {
-    --     ".<TOOL>-version",
-    --     ".<TOOL>rc"
-    -- }
-
+    -- Each entry must set exactly one check: bin, pkgconfig, sharedlib or command.
     systemDependencies = {
+        -- Build tools
         {
-            name = "gmp",
+            bin = "gcc",
+            packages = {
+                apt = "build-essential",
+                dnf = "gcc",
+                pacman = "base-devel",
+            },
+        },
+        {
+            bin = "make",
+            packages = {
+                apt = "build-essential",
+                dnf = "make",
+                pacman = "base-devel",
+            },
+        },
+
+        -- Libraries
+        {
             pkgconfig = "gmp",
             packages = {
                 pacman = "gmp",
@@ -39,7 +52,6 @@ PLUGIN = { -- luacheck: ignore
             },
         },
         {
-            name = "ncurses",
             pkgconfig = "ncurses",
             packages = {
                 pacman = "ncurses",
@@ -49,7 +61,9 @@ PLUGIN = { -- luacheck: ignore
             },
         },
         {
-            name = "berkeley-db",
+            -- Berkeley DB ships no .pc file, so check for the header directly.
+            command = "printf '#include <db.h>\\nint main(void) { return 0; }\\n' | "
+                .. "cc -x c - -c -o /dev/null 2>/dev/null",
             packages = {
                 pacman = "db",
                 apt = "libdb-dev",
@@ -58,7 +72,6 @@ PLUGIN = { -- luacheck: ignore
             },
         },
         {
-            name = "json-c",
             pkgconfig = "json-c",
             packages = {
                 pacman = "json-c",
@@ -68,7 +81,6 @@ PLUGIN = { -- luacheck: ignore
             },
         },
         {
-            name = "libxml2",
             pkgconfig = "libxml-2.0",
             packages = {
                 pacman = "libxml2",
@@ -77,5 +89,5 @@ PLUGIN = { -- luacheck: ignore
                 brew = "libxml2",
             },
         },
-    }
+    },
 }
