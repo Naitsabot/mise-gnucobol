@@ -10,6 +10,12 @@
 --   Arch:          pacman -S base-devel gmp ncurses db json-c libxml2
 --   macOS:         brew install gmp ncurses berkeley-db json-c libxml2
 
+--- Lowercased OS name. The vfox runtime reports "darwin", "linux" and
+--- "windows" in lowercase.
+local function os_type()
+    return (RUNTIME.osType or ""):lower()
+end
+
 --- Run a shell command and return true on success.
 --- Handles both Lua 5.1 (number) and 5.2+ (boolean) os.execute results.
 local function command_ok(cmd)
@@ -36,9 +42,9 @@ end
 --- Number of parallel build jobs for the current OS.
 local function build_jobs()
     local count
-    if RUNTIME.osType == "Linux" then
+    if os_type() == "linux" then
         count = command_int("nproc 2>/dev/null")
-    elseif RUNTIME.osType == "Darwin" then
+    elseif os_type() == "darwin" then
         count = command_int("sysctl -n hw.ncpu 2>/dev/null")
     end
     return tostring(count or 2)
@@ -80,7 +86,7 @@ local function build_cpp_ld_flags()
     local cppflags = os.getenv("CPPFLAGS") or ""
     local ldflags = os.getenv("LDFLAGS") or ""
 
-    if RUNTIME.osType == "Darwin" then
+    if os_type() == "darwin" then
         local cpp, ld = {}, {}
         for _, formula in ipairs({ "berkeley-db", "gmp", "json-c" }) do
             local prefix = brew_prefix(formula)
@@ -127,7 +133,7 @@ function PLUGIN:PostInstall(ctx)
     local sdkInfo = ctx.sdkInfo[PLUGIN.name]
     local path = sdkInfo.path
 
-    if RUNTIME.osType == "Windows" then
+    if os_type() == "windows" then
         error("This plugin builds GnuCOBOL from source and does not support Windows directly. Use WSL, or a Linux/macOS host.")
     end
 
@@ -140,7 +146,7 @@ function PLUGIN:PostInstall(ctx)
 
     -- On macOS the SDK's db.h is an old BSD header that configure cannot use,
     -- so a Homebrew Berkeley DB is required.
-    if RUNTIME.osType == "Darwin" and not brew_prefix("berkeley-db") then
+    if os_type() == "darwin" and not brew_prefix("berkeley-db") then
         error(
             "Homebrew's Berkeley DB was not found. Run `brew install berkeley-db` "
                 .. "and retry. (The macOS SDK's db.h is not usable by GnuCOBOL.)"
